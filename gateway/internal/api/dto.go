@@ -2,8 +2,6 @@ package api
 
 import "ledger"
 
-// DTO для запросов и ответов
-
 type CreateTransactionRequest struct {
 	Amount      float64 `json:"amount"`
 	Category    string  `json:"category"`
@@ -30,8 +28,6 @@ type BudgetResponse struct {
 	Limit    float64 `json:"limit"`
 	Period   string  `json:"period"`
 }
-
-// Преобразователи DTO <-> Domain models
 
 func ToTransaction(req CreateTransactionRequest) ledger.Transaction {
 	return ledger.Transaction{
@@ -76,7 +72,8 @@ func ToBudgetResponse(b ledger.Budget) BudgetResponse {
 	}
 }
 
-func ToBudgetsResponse(budgets map[string]ledger.Budget) []BudgetResponse {
+// Обновлено: теперь принимает срез []ledger.Budget вместо map
+func ToBudgetsResponse(budgets []ledger.Budget) []BudgetResponse {
 	result := make([]BudgetResponse, 0, len(budgets))
 	for _, b := range budgets {
 		result = append(result, ToBudgetResponse(b))

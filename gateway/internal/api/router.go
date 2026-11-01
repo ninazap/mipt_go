@@ -5,13 +5,11 @@ import (
 	"net/http"
 )
 
-// SetupRouter настраивает маршруты API
-func SetupRouter(ledger *ledger.Ledger) http.Handler {
-	api := NewAPI(ledger)
+func SetupRouter(ledgerService *ledger.Ledger) http.Handler {
+	api := NewAPI(ledgerService)
 	
 	mux := http.NewServeMux()
 	
-	// Маршруты для транзакций
 	mux.HandleFunc("/api/transactions", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -23,7 +21,6 @@ func SetupRouter(ledger *ledger.Ledger) http.Handler {
 		}
 	})
 	
-	// Маршруты для бюджетов
 	mux.HandleFunc("/api/budgets", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -34,7 +31,15 @@ func SetupRouter(ledger *ledger.Ledger) http.Handler {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
 	})
+
+	// Новый маршрут для отчётов
+	mux.HandleFunc("/api/reports/summary", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			api.GetReportSummary(w, r)
+		} else {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
 	
-	// Применяем middleware
 	return LoggingMiddleware(mux)
 }
