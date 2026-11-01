@@ -111,3 +111,8 @@ func (l *Ledger) LoadBudgets(r io.Reader) error {
 	}
 	return nil
 }
+
+func (l *Ledger) Reset() {
+	l.transactions = make([]Transaction, 0)
+	l.budgets = make(map[string]Budget)
+}
