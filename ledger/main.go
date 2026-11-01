@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+// Validatable interface - контракт для проверки валидности данных
+type Validatable interface {
+	Validate() error
+}
+
 type Transaction struct {
 	ID          int
 	Amount      float64
@@ -18,10 +23,32 @@ type Transaction struct {
 	Date        string
 }
 
+// Validate проверяет корректность полей транзакции
+func (tx Transaction) Validate() error {
+	if tx.Amount <= 0 {
+		return errors.New("transaction amount must be greater than zero")
+	}
+	if tx.Category == "" {
+		return errors.New("transaction category cannot be empty")
+	}
+	return nil
+}
+
 type Budget struct {
 	Category string
 	Limit    float64
 	Period   string
+}
+
+// Validate проверяет корректность полей бюджета
+func (b Budget) Validate() error {
+	if b.Limit <= 0 {
+		return errors.New("budget limit must be positive")
+	}
+	if b.Category == "" {
+		return errors.New("budget category cannot be empty")
+	}
+	return nil
 }
 
 type Ledger struct {
@@ -36,13 +63,19 @@ func NewLedger() *Ledger {
 	}
 }
 
-func (l *Ledger) SetBudget(b Budget) {
+// SetBudget добавляет или обновляет бюджет с валидацией
+func (l *Ledger) SetBudget(b Budget) error {
+	if err := b.Validate(); err != nil {
+		return fmt.Errorf("invalid budget: %w", err)
+	}
 	l.budgets[b.Category] = b
+	return nil
 }
 
+// AddTransaction добавляет транзакцию с валидацией
 func (l *Ledger) AddTransaction(tx Transaction) error {
-	if tx.Amount <= 0 {
-		return errors.New("transaction amount must be greater than zero")
+	if err := tx.Validate(); err != nil {
+		return fmt.Errorf("invalid transaction: %w", err)
 	}
 
 	if budget, exists := l.budgets[tx.Category]; exists {
@@ -74,17 +107,72 @@ func (l *Ledger) LoadBudgets(r io.Reader) error {
 		return fmt.Errorf("failed to parse budgets JSON: %w", err)
 	}
 	for _, b := range budgets {
-		l.SetBudget(b)
+		if err := l.SetBudget(b); err != nil {
+			return fmt.Errorf("failed to set budget: %w", err)
+		}
 	}
 	return nil
+}
+
+// CheckValid - демонстрация работы с интерфейсом Validatable
+func CheckValid(v Validatable) error {
+	return v.Validate()
 }
 
 func main() {
 	ledger := NewLedger()
 
-	ledger.SetBudget(Budget{Category: "Food", Limit: 5000.0, Period: "month"})
-	ledger.SetBudget(Budget{Category: "Transport", Limit: 2000.0, Period: "month"})
-	fmt.Println("Initial budgets set via code.")
+	fmt.Println("=== Testing Validatable Interface ===\n")
+
+	txValid := Transaction{Amount: 100.0, Category: "Food", Description: "Test"}
+	txInvalid := Transaction{Amount: -50.0, Category: "", Description: "Invalid"}
+
+	budgetValid := Budget{Category: "Food", Limit: 5000.0, Period: "month"}
+	budgetInvalid := Budget{Category: "", Limit: -100.0, Period: "month"}
+
+	fmt.Println("Testing Transaction validation via interface:")
+	if err := CheckValid(txValid); err != nil {
+		fmt.Printf("  Valid tx failed: %v\n", err)
+	} else {
+		fmt.Println("  ✓ Valid transaction passed validation")
+	}
+
+	if err := CheckValid(txInvalid); err != nil {
+		fmt.Printf("  ✓ Invalid transaction rejected: %v\n", err)
+	} else {
+		fmt.Println("  ✗ Invalid transaction should have been rejected")
+	}
+
+	fmt.Println("\nTesting Budget validation via interface:")
+	if err := CheckValid(budgetValid); err != nil {
+		fmt.Printf("  Valid budget failed: %v\n", err)
+	} else {
+		fmt.Println("  ✓ Valid budget passed validation")
+	}
+
+	if err := CheckValid(budgetInvalid); err != nil {
+		fmt.Printf("  ✓ Invalid budget rejected: %v\n", err)
+	} else {
+		fmt.Println("  ✗ Invalid budget should have been rejected")
+	}
+
+	fmt.Println("\n=== Ledger Operations with Validation ===\n")
+
+	if err := ledger.SetBudget(Budget{Category: "Food", Limit: 5000.0, Period: "month"}); err != nil {
+		fmt.Printf("Error setting budget: %v\n", err)
+	} else {
+		fmt.Println("Budget 'Food' set successfully")
+	}
+
+	if err := ledger.SetBudget(Budget{Category: "Transport", Limit: 2000.0, Period: "month"}); err != nil {
+		fmt.Printf("Error setting budget: %v\n", err)
+	} else {
+		fmt.Println("Budget 'Transport' set successfully")
+	}
+
+	if err := ledger.SetBudget(Budget{Category: "", Limit: 1000.0}); err != nil {
+		fmt.Printf("✓ Expected error for invalid budget: %v\n", err)
+	}
 
 	filename := "budgets.json"
 	initialBudgetsJSON := `[{"Category": "Entertainment", "Limit": 3000.0, "Period": "month"}]`
@@ -131,9 +219,14 @@ func main() {
 		fmt.Println("UNEXPECTED: tx3 added successfully.")
 	}
 
-	txInvalid := Transaction{Amount: 0, Category: "Test", Description: "Invalid transaction"}
-	if err := ledger.AddTransaction(txInvalid); err != nil {
-		fmt.Printf("EXPECTED VALIDATION ERROR: %v\n", err)
+	txInvalidAmount := Transaction{Amount: 0, Category: "Test", Description: "Invalid amount"}
+	if err := ledger.AddTransaction(txInvalidAmount); err != nil {
+		fmt.Printf("✓ Expected validation error: %v\n", err)
+	}
+
+	txInvalidCategory := Transaction{Amount: 100.0, Category: "", Description: "Empty category"}
+	if err := ledger.AddTransaction(txInvalidCategory); err != nil {
+		fmt.Printf("✓ Expected validation error: %v\n", err)
 	}
 
 	fmt.Println("\n--- All Saved Transactions ---")
@@ -142,4 +235,6 @@ func main() {
 		fmt.Printf("ID: %d, Amount: %.2f, Category: %-12s, Description: %-20s, Date: %s\n",
 			tx.ID, tx.Amount, tx.Category, tx.Description, tx.Date)
 	}
+
+	fmt.Printf("\nTotal transactions saved: %d\n", len(allTransactions))
 }
